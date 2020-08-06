@@ -1,4 +1,5 @@
-FROM python:3.7-slim
+FROM  pytorch/pytorch:1.5-cuda10.1-cudnn7-devel
+# Using a Pytorch base image because it has both Python and CUDA
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8
@@ -17,12 +18,11 @@ RUN mkdir -p /usr/share/man/man1 && \
 # Install app requirements first to avoid invalidating the cache
 COPY requirements.txt setup.py /app/
 WORKDIR /app
-RUN pip install --user -r requirements.txt && \
-    pip install --user entmax && \
-    python -c "import nltk; nltk.download('stopwords'); nltk.download('punkt')"
+RUN pip install -r requirements.txt && \
+    pip install entmax
 
-# Cache the pretrained BERT model
-RUN python -c "from transformers import BertModel; BertModel.from_pretrained('bert-large-uncased-whole-word-masking')"
+# Make sure to download nltk data in a globally available location
+RUN python -m nltk.downloader -d /usr/local/share/nltk_data punkt stopwords
 
 # Download & cache StanfordNLP
 RUN mkdir -p /app/third_party && \
@@ -32,16 +32,8 @@ RUN mkdir -p /app/third_party && \
 # Now copy the rest of the app
 COPY . /app/
 
-# Assume that the datasets will be mounted as a volume into /mnt/data on startup.
-# Symlink the data subdirectory to that volume.
-ENV CACHE_DIR=/mnt/data
-RUN mkdir -p /mnt/data && \
-    mkdir -p /app/data && \
-    cd /app/data && \
-    ln -snf /mnt/data/spider spider && \
-    ln -snf /mnt/data/wikisql wikisql
+# Assume that there is a data directory to which Glove vectors will be downloaded
+ENV CACHE_DIR=data
 
 # Convert all shell scripts to Unix line endings, if any
 RUN /bin/bash -c 'if compgen -G "/app/**/*.sh" > /dev/null; then dos2unix /app/**/*.sh; fi' 
-
-ENTRYPOINT bash
